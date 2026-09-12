@@ -1,43 +1,62 @@
 import pandas as pd
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.decomposition import PCA
 
 print("Loading genomic signatures...")
-# Load the dataset
 df = pd.read_csv('genomic_signatures.csv')
-
-# Separate the filenames from the numerical k-mer data
 filenames = df['filename']
 X = df.drop('filename', axis=1)
 
-print("Running K-Means Clustering and PCA...")
-# Group the data into 3 mathematical clusters
-kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-clusters = kmeans.fit_predict(X)
+print("Calculating statistical validity (Silhouette Score & Elbow Method)...")
+inertia = []
+silhouette_scores = []
+K_range = range(2, 10)
 
-# Reduce the 4,096 dimensions down to 2 dimensions for plotting
+# Test every cluster size from 2 to 9
+for k in K_range:
+    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+    labels = kmeans.fit_predict(X)
+    inertia.append(kmeans.inertia_)
+    silhouette_scores.append(silhouette_score(X, labels))
+
+# 1. Plot the Statistical Proof
+fig, ax1 = plt.subplots(figsize=(10, 6))
+
+# Plot Elbow (Inertia) on the left axis
+ax1.plot(K_range, inertia, 'bo-')
+ax1.set_xlabel('Number of Clusters (k)')
+ax1.set_ylabel('Inertia (Elbow Method)', color='b')
+
+# Plot Silhouette Score on the right axis
+ax2 = ax1.twinx()
+ax2.plot(K_range, silhouette_scores, 'ro-')
+ax2.set_ylabel('Silhouette Score', color='r')
+
+plt.title('Determining Optimal k: Elbow Method & Silhouette Score')
+plt.savefig('cluster_stats.png')
+print("Saved statistical metrics to cluster_stats.png")
+
+# 2. Run the Final PCA Plot with the optimal k (we will use 3 based on our biology)
+print("Running final K-Means and PCA...")
+optimal_k = 3
+final_kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
+clusters = final_kmeans.fit_predict(X)
+
 pca = PCA(n_components=2)
 principal_components = pca.fit_transform(X)
 
-# Create a new dataframe for visualization
 plot_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
 plot_df['Cluster'] = clusters
 plot_df['Genome'] = filenames
 
-# Plot the results
 plt.figure(figsize=(10, 8))
 sns.scatterplot(x='PC1', y='PC2', hue='Cluster', palette='viridis', data=plot_df, s=100)
-plt.title('Genomic Signatures of Extremophiles (PCA)')
+plt.title(f'Genomic Signatures of Extremophiles (k={optimal_k})')
 plt.xlabel('Principal Component 1')
 plt.ylabel('Principal Component 2')
-
-# Save the plot as an image file
 plt.savefig('cluster_plot.png')
-print("Success! Open 'cluster_plot.png' to view your results.")
-# Export the final cluster assignments to a new CSV
-output_df = plot_df[['Genome', 'Cluster']]
-output_df.to_csv('cluster_results.csv', index=False)
-print("Saved cluster assignments to cluster_results.csv")
+print("Saved cluster plot to cluster_plot.png")
 
